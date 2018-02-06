@@ -79,24 +79,39 @@ def backprop(net, a, y, mem, neterr, rate):
 
 	e = cost_deriv(a, y)
 	for w, b, ew, eb, a, ap in reversed(list(zip(ws, bs[1:], ews, ebs[1:], mem[1:], mem[:-1]))):
-		eb -= e*rate
-		ew = np.dot(act_deriv(a).transpose(), act(ap))*rate
-		e = # continue
+		eb += e*rate
+		e = e*act_deriv(a)
+		ew += np.outer(e, act(ap))*rate
+		e = np.dot(e.transpose(), w)
+	ebs[0] += e
 
+	return e
 
-
-
-ni, nh, no = imgsize[0]*imgsize[1], 15, 10 # input, hidden and output layers sizes
+sizes = (imgsize[0]*imgsize[1], 15, 10) # input, hidden and output layers sizes
 mri = 0.01 # magnitude of initial random values
 
 # weights and biases
 net = (
-	[mri*np.random.randn(sx, sy) for sx, sy in zip(sizes[:-1], sizes[1:])],
-	[mri*np.random.randn(s) for s in sizes]
+	list([mri*np.random.randn(sx, sy) for sx, sy in zip(sizes[1:], sizes[:-1])]),
+	list([mri*np.random.randn(s) for s in sizes])
 )
 
-batchsize = 10
-rate = 1e-2
-for digit, img in testset:
-	out = feedforward(net, img)
-	print(out.argmax(), digit)
+batchsize = 10 # mini-batch size
+rate = 1e-2 # gradient descend rate
+for nepoch in range(1):
+	for digit, img in trainset:
+		mem = []
+		res = np.array([i == digit for i in range(10)])
+		out = feedforward(net, img, mem)
+		neterr = tuple((list([np.zeros_like(v) for v in wb]) for wb in net))
+		backprop(net, out, res, mem, neterr, rate)
+		for wb, ewb in zip(net, neterr):
+			for v, ev in zip(wb, ewb):
+				v -= ev
+
+	totalcost = 0.0
+	for digit, img in testset:
+		res = np.array([i == digit for i in range(10)])
+		out = feedforward(net, img, mem)
+		totalcost += cost(out, res)
+	print(totalcost/len(testset))
