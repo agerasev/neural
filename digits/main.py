@@ -2,6 +2,7 @@ import numpy as np
 import os
 import gzip
 import struct
+import random
 
 
 # load input data
@@ -43,7 +44,20 @@ _imgsize, testset = load("data/t10k-labels-idx1-ubyte.gz", "data/t10k-images-idx
 assert(imgsize == _imgsize)
 
 
-# function definition
+# classes and function definition
+
+class Net:
+	def __init__(self, sizes, mag=0):
+		self.sizes = sizes
+		if mag == 0:
+			self.weights = list([np.zeros((sx, sy), dtype=np.float32) for sx, sy in zip(sizes[1:], sizes[:-1])])
+			self.biases = list([np.zeros(s, dtype=np.float32) for s in sizes])
+		else:
+			self.weights = list([mag*np.random.randn(sx, sy) for sx, sy in zip(sizes[1:], sizes[:-1])])
+			self.biases = list([mag*np.random.randn(s) for s in sizes])
+
+	def __iter__(self):
+		return iter(self.weights + self.biases)
 
 def act(x):
 	return np.tanh(x)
@@ -51,19 +65,24 @@ def act(x):
 def act_deriv(x):
 	return 1/np.cosh(x)**2
 
-def feedforward(net, x, mem=None):
-	weights, biases = net
+def feedforward(net, x, fmem=False):
+	a = x + net.biases[0]
+	if fmem:
+		mem = list([[None]*2 for _ in net.biases])
+		mem[0][0] = a
+	else:
+		mem = None
 
-	a = x + biases[0]
-	if mem is not None:
-		mem.append(a)
+	for i, (w, b) in enumerate(zip(net.weights, net.biases[1:])):
+		a = act(a)
+		if fmem:
+			mem[i][1] = a
 
-	for w, b in zip(weights, biases[1:]):
-		a = np.dot(w, act(a)) + b
-		if mem is not None:
-			mem.append(a)
+		a = np.dot(w, a) + b
+		if fmem:
+			mem[i + 1][0] = a
 
-	return a
+	return (a, mem)
 
 # cost function
 def cost(a, y):
@@ -74,44 +93,44 @@ def cost_deriv(a, y):
 	return a - y
 
 def backprop(net, a, y, mem, neterr, rate):
-	ws, bs = net
-	ews, ebs = neterr
-
 	e = cost_deriv(a, y)
-	for w, b, ew, eb, a, ap in reversed(list(zip(ws, bs[1:], ews, ebs[1:], mem[1:], mem[:-1]))):
+	zmem = list(zip(*mem))
+	zlist = list(zip(
+		net.weights, net.biases[1:],
+		neterr.weights, neterr.biases[1:],
+		zmem[0][1:], zmem[1][:-1]
+	))
+	for w, b, ew, eb, v, ap in reversed(zlist):
 		eb += e*rate
-		e = e*act_deriv(a)
-		ew += np.outer(e, act(ap))*rate
+		e = e*act_deriv(v)
+		ew += np.outer(e, ap)*rate
 		e = np.dot(e.transpose(), w)
-	ebs[0] += e
+	neterr.biases[0] += e
 
-	return e
+net = Net((imgsize[0]*imgsize[1], 15, 10), mag=1e-2)
 
-sizes = (imgsize[0]*imgsize[1], 15, 10) # input, hidden and output layers sizes
-mri = 0.01 # magnitude of initial random values
-
-# weights and biases
-net = (
-	list([mri*np.random.randn(sx, sy) for sx, sy in zip(sizes[1:], sizes[:-1])]),
-	list([mri*np.random.randn(s) for s in sizes])
-)
-
-batchsize = 10 # mini-batch size
-rate = 1e-2 # gradient descend rate
-for nepoch in range(1):
-	for digit, img in trainset:
-		mem = []
-		res = np.array([i == digit for i in range(10)])
-		out = feedforward(net, img, mem)
-		neterr = tuple((list([np.zeros_like(v) for v in wb]) for wb in net))
-		backprop(net, out, res, mem, neterr, rate)
-		for wb, ewb in zip(net, neterr):
-			for v, ev in zip(wb, ewb):
-				v -= ev
+batchsize = 10
+rate = 1e-2
+for iepoch in range(1):
+	print("epoch %s:" % iepoch)
+	totalcost = 0.0
+	for batch in [trainset[p:p+batchsize] for p in range(0, len(trainset), batchsize)]:
+		neterr = Net(net.sizes)
+		for digit, img in batch:
+			res = np.array([i == digit for i in range(10)])
+			out, mem = feedforward(net, img, fmem=True)
+			totalcost += cost(out, res)
+			backprop(net, out, res, mem, neterr, rate)
+		for v, ev in zip(net, neterr):
+			v -= ev/batchsize
+	print("train cost avg: %s" % (totalcost/len(testset)))
 
 	totalcost = 0.0
+	hitcount = 0
 	for digit, img in testset:
 		res = np.array([i == digit for i in range(10)])
-		out = feedforward(net, img, mem)
+		out, _ = feedforward(net, img)
 		totalcost += cost(out, res)
-	print(totalcost/len(testset))
+		hitcount += digit == np.argmax(out)
+	print("test cost avg: %s" % (totalcost/len(testset)))
+	print("hit count: %s" % hitcount)
