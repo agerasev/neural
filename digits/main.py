@@ -3,7 +3,9 @@ import os
 import gzip
 import struct
 import random
+import time
 
+_version = 0.1
 
 # load input data
 
@@ -112,8 +114,10 @@ net = Net((imgsize[0]*imgsize[1], 15, 10), mag=1e-2)
 batchsize = 10
 rate = 1e-2
 for iepoch in range(1):
-	print("epoch %s:" % iepoch)
+	print("epoch %d:" % iepoch)
+	print("train:")
 	totalcost = 0.0
+	tstart = time.time()
 	for batch in [trainset[p:p+batchsize] for p in range(0, len(trainset), batchsize)]:
 		neterr = Net(net.sizes)
 		for digit, img in batch:
@@ -123,14 +127,20 @@ for iepoch in range(1):
 			backprop(net, out, res, mem, neterr, rate)
 		for v, ev in zip(net, neterr):
 			v -= ev/batchsize
-	print("train cost avg: %s" % (totalcost/len(testset)))
+	print("cost avg: %.4f" % (totalcost/len(testset)))
+	print("time elapsed: %.2f s" % (time.time() - tstart))
 
+	print("test:")
 	totalcost = 0.0
 	hitcount = 0
+	tstart = time.time()
 	for digit, img in testset:
 		res = np.array([i == digit for i in range(10)])
 		out, _ = feedforward(net, img)
 		totalcost += cost(out, res)
 		hitcount += digit == np.argmax(out)
-	print("test cost avg: %s" % (totalcost/len(testset)))
-	print("hit count: %s" % hitcount)
+	print("cost avg: %.4f" % (totalcost/len(testset)))
+	print("hit count: %d / %d" % (hitcount, len(testset)))
+	print("time elapsed: %.2f s" % (time.time() - tstart))
+
+print("done")
