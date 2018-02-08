@@ -5,7 +5,7 @@ import struct
 import random
 import time
 
-_version = 0.1
+_version = 0.2
 
 # load input data
 
@@ -52,25 +52,37 @@ class Net:
 	def __init__(self, sizes, mag=0):
 		self.sizes = sizes
 		if mag == 0:
-			self.weights = list([np.zeros((sx, sy), dtype=np.float32) for sx, sy in zip(sizes[1:], sizes[:-1])])
-			self.biases = list([np.zeros(s, dtype=np.float32) for s in sizes])
+			self.weights = [np.zeros((sx, sy), dtype=np.float32) for sx, sy in zip(sizes[1:], sizes[:-1])]
+			self.biases = [np.zeros(s, dtype=np.float32) for s in sizes]
 		else:
-			self.weights = list([mag*np.random.randn(sx, sy) for sx, sy in zip(sizes[1:], sizes[:-1])])
-			self.biases = list([mag*np.random.randn(s) for s in sizes])
+			self.weights = [mag*np.random.randn(sx, sy) for sx, sy in zip(sizes[1:], sizes[:-1])]
+			self.biases = [mag*np.random.randn(s) for s in sizes]
 
 	def __iter__(self):
 		return iter(self.weights + self.biases)
+
+	def zcopy(self):
+		return Net(self.sizes)
+
+	def mkmem(self):
+		return [[np.zeros_like(b) for _ in range(2)] for b in self.biases]
+
+	def fill(self, value):
+		for w in self.weights:
+			w.fill(value)
+		for b in self.biases:
+			b.fill(value)
 
 def act(x):
 	return np.tanh(x)
 
 def act_deriv(x):
-	return 1/np.cosh(x)**2
+		return 1/np.cosh(x)**2
 
 def feedforward(net, x, fmem=False):
 	a = x + net.biases[0]
 	if fmem:
-		mem = list([[None]*2 for _ in net.biases])
+		mem = net.mkmem()
 		mem[0][0] = a
 	else:
 		mem = None
@@ -89,7 +101,7 @@ def feedforward(net, x, fmem=False):
 # cost function
 def cost(a, y):
 	d = a - y
-	return np.dot(d, d)
+	return np.dot(d, d)/2
 
 def cost_deriv(a, y):
 	return a - y
@@ -113,6 +125,7 @@ def backprop(net, a, y, mem, neterr, rate):
 	neterr.biases[0] += e
 
 net = Net((imgsize[0]*imgsize[1], 15, 10), mag=1e-2)
+neterr = net.zcopy()
 
 batchsize = 10
 rate = 1e-2
@@ -122,14 +135,14 @@ for iepoch in range(10):
 	totalcost = 0.0
 	tstart = time.time()
 	for batch in [trainset[p:p+batchsize] for p in range(0, len(trainset), batchsize)]:
-		neterr = Net(net.sizes)
 		for digit, img in batch:
 			res = np.array([i == digit for i in range(10)])
-			out, mem = feedforward(net, img, fmem=True)
+			out, netmem = feedforward(net, img, fmem=True)
 			totalcost += cost(out, res)
-			backprop(net, out, res, mem, neterr, rate)
+			backprop(net, out, res, netmem, neterr, rate)
 		for v, ev in zip(net, neterr):
 			v -= ev/batchsize
+		neterr.fill(0)
 	print("cost avg: %.4f" % (totalcost/len(testset)))
 	print("time elapsed: %.2f s" % (time.time() - tstart))
 
