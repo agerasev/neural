@@ -89,7 +89,7 @@ def feedforward(net, x, fmem=False):
 # cost function
 def cost(a, y):
 	d = a - y
-	return np.dot(d, d) # mse
+	return np.dot(d, d)
 
 def cost_deriv(a, y):
 	return a - y
@@ -102,18 +102,21 @@ def backprop(net, a, y, mem, neterr, rate):
 		neterr.weights, neterr.biases[1:],
 		zmem[0][1:], zmem[1][:-1]
 	))
+	last = True
 	for w, b, ew, eb, v, ap in reversed(zlist):
+		if not last:
+			e = e*act_deriv(v)
 		eb += e*rate
-		e = e*act_deriv(v)
 		ew += np.outer(e, ap)*rate
 		e = np.dot(e.transpose(), w)
+		last = False
 	neterr.biases[0] += e
 
 net = Net((imgsize[0]*imgsize[1], 15, 10), mag=1e-2)
 
 batchsize = 10
 rate = 1e-2
-for iepoch in range(1):
+for iepoch in range(10):
 	print("epoch %d:" % iepoch)
 	print("train:")
 	totalcost = 0.0
