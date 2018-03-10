@@ -15,10 +15,10 @@ class Node:
     def newgrad(self):
         raise NotImplementedError()
 
-    def backprop(self, grad, m, ey):
+    def backprop(self, grad, m, dy):
         raise NotImplementedError()
     
-    def learn(self, grad, rate):
+    def _learn(self, grad, rate):
         raise NotImplementedError()
 
 class Affine(Node):
@@ -35,11 +35,11 @@ class Affine(Node):
     def newgrad(self):
         return np.zeros_like(self.W)
 
-    def backprop(self, grad, m, ey):
-        grad += np.outer(m, ey)
-        return np.dot(self.W, ey)
+    def backprop(self, grad, m, dy):
+        grad += np.outer(m, dy)
+        return np.dot(self.W, dy)
 
-    def learn(self, grad):
+    def _learn(self, grad):
         self.W -= grad
 
 class Bias(Node):
@@ -56,11 +56,11 @@ class Bias(Node):
     def newgrad(self):
         return np.zeros_like(self.b)
 
-    def backprop(self, grad, m, ey):
-        grad += ey
-        return ey
+    def backprop(self, grad, m, dy):
+        grad += dy
+        return dy
 
-    def learn(self, grad):
+    def _learn(self, grad):
         self.b -= grad
 
 class _EmptyNode(Node):
@@ -70,7 +70,7 @@ class _EmptyNode(Node):
     def newgrad(self):
         return None
 
-    def learn(self, grad):
+    def _learn(self, grad):
         pass
 
 class Tanh(_EmptyNode):
@@ -83,8 +83,8 @@ class Tanh(_EmptyNode):
     def feed_mem(self, x):
         return self.feed(x), x
 
-    def backprop(self, grad, m, ey):
-        return ey*tanh_deriv(m)
+    def backprop(self, grad, m, dy):
+        return dy*tanh_deriv(m)
 
 class Sigmoid(_EmptyNode):
     def __init__(self):
@@ -96,8 +96,8 @@ class Sigmoid(_EmptyNode):
     def feed_mem(self, x):
         return self.feed(x), x
 
-    def backprop(self, grad, m, ey):
-        return ey*sigmoid_deriv(m)
+    def backprop(self, grad, m, dy):
+        return dy*sigmoid_deriv(m)
 
 class Product(_EmptyNode):
     def __init__(self):
@@ -109,5 +109,5 @@ class Product(_EmptyNode):
     def feed_mem(self, x):
         return self.feed(x), x
 
-    def backprop(self, grad, m, ey):
-        return m[1]*ey, m[0]*ey
+    def backprop(self, grad, m, dy):
+        return m[1]*dy, m[0]*dy

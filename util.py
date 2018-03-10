@@ -17,8 +17,8 @@ def softmax(y):
     ey = np.exp(y)
     return ey/np.sum(ey)
 
-def cross_entropy_loss(y, r):
-    return -np.log(np.dot(y, r))
+def cross_entropy_loss(y, ir):
+    return -np.log(y[ir])
 
 def rms(a, y):
     d = a - y
