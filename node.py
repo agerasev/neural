@@ -38,7 +38,7 @@ class Affine(Node, AffineParam):
         AffineParam.__init__(self, mag*np.random.randn(sx, sy))
 
     def feed(self, x):
-        return np.dot(x, self.W)
+        return np.tensordot(x, self.W, axes=(-1, 0))
 
     def feed_mem(self, x):
         return self.feed(x), x
@@ -47,8 +47,8 @@ class Affine(Node, AffineParam):
         return AffineParam(np.zeros_like(self.W))
 
     def backprop(self, grad, m, dy):
-        grad.W += np.outer(m, dy)
-        return np.dot(self.W, dy)
+        grad.W += np.tensordot(m, dy, axes=(0, 0))/dy.shape[0]
+        return np.tensordot(dy, self.W, axes=(-1, 1))
 
     def __iter__(self):
         yield self.W
@@ -76,7 +76,7 @@ class Bias(Node, BiasParam):
         return BiasParam(np.zeros_like(self.b))
 
     def backprop(self, grad, m, dy):
-        grad.b += dy
+        grad.b += np.sum(dy, axis=0)
         return dy
 
 class _EmptyParam(Param):

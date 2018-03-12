@@ -1,31 +1,47 @@
 import numpy as np
 
 
+def reg_loss(node, reg_rate=1e-3):
+    loss = 0.0
+    for W in node:
+        loss += reg_rate*np.sum(W**2, axis=None)
+    return loss
+
 class Optim:
-	def __init__(self):
-		pass
+    def __init__(self, **kwargs):
+        self.opts = kwargs
 
-	def learn(self, node, grad, **kwargs):
-		raise NotImplementedError()
+    def regularize(self, node, grad):
+        reg_rate = self.opts.get("reg_rate", 0)
+        if reg_rate is not None:
+            for W, dW in zip(node, grad):
+                dW += 2*reg_rate*W
 
-class SGD:
-	def __init__(self, learning_rate):
-		self.rate = learning_rate
+    def learn(self, node, grad, **kwargs):
+        raise NotImplementedError()
 
-	def learn(self, node, grad, **kwargs):
-		for W, dW in zip(node, grad):
-			rate = self.rate
-			rate /= kwargs.get("batch_size", 1)
-			W -= rate*dW
+class SGD(Optim):
+    def __init__(self, **kwargs):
+        Optim.__init__(self, **kwargs)
+        self.rate = kwargs["learn_rate"]
 
-class Adagrad:
-	def __init__(self, learning_rate, adagrad):
-		self.rate = learning_rate
-		self.adagrad = adagrad
+    def learn(self, node, grad, **kwargs):
+        self.regularize(node, grad)
+        for W, dW in zip(node, grad):
+            rate = self.rate
+            rate /= kwargs.get("norm", 1)
+            W -= rate*dW
 
-	def learn(self, node, grad, **kwargs):
-		for W, dW, aW in zip(node, grad, self.adagrad):
-			aW += dW**2
-			rate = self.rate
-			rate /= kwargs.get("batch_size", 1)
-			W -= rate*dW/np.sqrt(aW + 1e-8)
+class Adagrad(Optim):
+    def __init__(self, **kwargs):
+        Optim.__init__(self, **kwargs)
+        self.rate = kwargs["learn_rate"]
+        self.adagrad = kwargs["adagrad"]
+
+    def learn(self, node, grad, **kwargs):
+        self.regularize(node, grad)
+        for W, dW, aW in zip(node, grad, self.adagrad):
+            aW += dW**2
+            rate = self.rate
+            rate /= kwargs.get("norm", 1)
+            W -= rate*dW/np.sqrt(aW + 1e-8)
