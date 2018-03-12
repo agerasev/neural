@@ -1,4 +1,4 @@
-from node import Node
+from node import Node, Param
 
 import numpy as np
 
@@ -23,113 +23,110 @@ def _wrap_link(l):
     else:
         return l, 0
 
-class Net(Node):
+class NetGrad(Param):
+    def __init__(self, params):
+        Param.__init__(self)
+        self.params = params
+
+    def __iter__(self):
+        for param in self.params:
+            for p in param:
+                yield p
+
+class Net(Node, Param):
     def __init__(self, nodes, links):
-        super().__init__()
+        Node.__init__(self)
+        Param.__init__(self)
+
         self.nodes = nodes
         self.links = [(_wrap_link(l[0]), _wrap_link(l[1])) for l in links]
 
         self.ilmap = {il: [l[0] for l in self.links if l[1] == il] for il in set([l[1] for l in self.links])}
         self.olmap = {ol: [l[1] for l in self.links if l[0] == ol] for ol in set([l[0] for l in self.links])}
         
-        self.inmap = {i: [] for i in range(-1, len(nodes))}
-        self.onmap = {i: [] for i in range(-1, len(nodes))}
+        self.incnt = {i: [] for i in range(-1, len(nodes))}
+        self.oncnt = {i: [] for i in range(-1, len(nodes))}
         for ol, il in self.links:
-            self.inmap[il[0]].append(il[1])
-            self.onmap[ol[0]].append(ol[1])
-        for i in self.inmap:
-            self.inmap[i] = sorted(self.inmap[i])
-        for i in self.onmap:
-            self.onmap[i] = sorted(self.onmap[i])
+            self.incnt[il[0]].append(il[1])
+            self.oncnt[ol[0]].append(ol[1])
+        for i in self.incnt:
+            self.incnt[i] = sorted(self.incnt[i])
+        for i in self.oncnt:
+            self.oncnt[i] = sorted(self.oncnt[i])
 
-    def _feed(self, x, mem=False):
-        x = _wrap_list(x)
+    def __iter__(self):
+        for node in self.nodes:
+            for p in node:
+                yield p
+
+    def _propagate(self, grad, im, v, mem=False, back=False):
+        v = _wrap_list(v)
+
         if mem:
-            m = [None]*len(self.nodes)
+            om = [None]*len(self.nodes)
         else:
-            m = None
+            om = None
 
         ivs = {k: None for k in set([link[1] for link in self.links])}
         ovs = {k: None for k in set([link[0] for link in self.links])}
         used = [False]*len(self.nodes)
-        
-        for oi in self.onmap[-1]:
-            ovs[(-1, oi)] = x[oi]
 
-        while not all(used):
+        if not back:
+            ilmap, olmap = self.ilmap, self.olmap
+            incnt, oncnt = self.incnt, self.oncnt
+        else:
+            ivs, ovs = ovs, ivs
+            ilmap, olmap = self.olmap, self.ilmap
+            incnt, oncnt = self.oncnt, self.incnt
+        
+        for oi in oncnt[-1]:
+            ovs[(-1, oi)] = v[oi]
+
+        while True:
             steps = 0
-            for il, ols in self.ilmap.items():
+            for il, ols in ilmap.items():
                 povs = [ovs[ol] for ol in ols]
-                if all([ov is not None for ov in povs]):
+                if ivs[il] is None and all([ov is not None for ov in povs]):
                     ivs[il] = sum(povs)
                     steps += 1
 
             for i, node in enumerate(self.nodes):
                 if used[i]:
                     continue
-                inv = [ivs[(i, ii)] for ii in self.inmap[i]]
+                inv = [ivs[(i, ii)] for ii in incnt[i]]
                 if all([v is not None for v in inv]):
                     nx = _unwrap_list(inv)
-                    if not mem:
-                        nx = node.feed(nx)
+                    if not back:
+                        if not mem:
+                            ny = node.feed(nx)
+                        else:
+                            ny, nm = node.feed_mem(nx)
+                            om[i] = nm
                     else:
-                        nx, nm = node.feed_mem(nx)
-                        m[i] = nm
-                    onv = _wrap_list(nx)
+                        ny = node.backprop(grad.params[i], im[i], nx)
+                    onv = _wrap_list(ny)
                     used[i] = True
                     steps += 1
                     for j, v in enumerate(onv):
                         ovs[i, j] = v
 
             if steps == 0:
-                raise Exception("no steps while not all nodes are used, check network connectivity")
+                break
 
-        y = _unwrap_list([ivs[(i, ii)] for ii in self.inmap[-1]])
-        return y, m
+        if not all(used):
+            raise Exception("no steps remaining while not all nodes are used, check network connectivity")
+
+        y = _unwrap_list([ivs[(-1, ii)] for ii in incnt[-1]])
+        return y, om
 
     def feed(self, x):
-        return self._feed(x, mem=False)[0]
+        return self._propagate(None, None, x)[0]
 
     def feed_mem(self, x):
-        return self._feed(x, mem=True)
+        return self._propagate(None, None, x, mem=True)
 
     def newgrad(self):
-        return [node.newgrad() for node in self.nodes]
+        return NetGrad([node.newgrad() for node in self.nodes])
 
     def backprop(self, grad, m, dy):
-        dy = _wrap_list(dy)
-
-        ivs = {k: None for k in set([link[1] for link in self.links])}
-        ovs = {k: None for k in set([link[0] for link in self.links])}
-        used = [False]*len(self.nodes)
-        
-        for ii in self.inmap[-1]:
-            ivs[(-1, ii)] = dy[ii]
-
-        while not all(used):
-            steps = 0
-            for ol, ils in self.olmap.items():
-                pivs = [ivs[il] for il in ils]
-                if all([iv is not None for iv in pivs]):
-                    ovs[ol] = sum(pivs)
-                    steps += 1
-
-            for i, node in enumerate(self.nodes):
-                if used[i]:
-                    continue
-                onv = [ovs[(i, oi)] for oi in self.onmap[i]]
-                if all([v is not None for v in onv]):
-                    inv = _wrap_list(node.backprop(grad[i], m[i], _unwrap_list(onv)))
-                    used[i] = True
-                    steps += 1
-                    for j, v in enumerate(inv):
-                        ivs[i, j] = v
-
-            if steps == 0:
-                raise Exception("no steps while not all nodes are used, check network connectivity")
-
-        return _unwrap_list([ovs[(i, oi)] for oi in self.onmap[-1]])
-
-    def _learn(self, grad):
-        for node, ngrad in zip(self.nodes, grad):
-            node._learn(ngrad)
+        return self._propagate(grad, m, dy, back=True)[0]

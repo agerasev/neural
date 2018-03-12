@@ -1,8 +1,14 @@
 import numpy as np
 from util import *
 
+class Param:
+    def __init__(self):
+        pass
 
-class Node:
+    def __iter__(self):
+        raise NotImplementedError()
+
+class Node(Param):
     def __init__(self):
         pass
     
@@ -17,14 +23,19 @@ class Node:
 
     def backprop(self, grad, m, dy):
         raise NotImplementedError()
-    
-    def _learn(self, grad, rate):
-        raise NotImplementedError()
 
-class Affine(Node):
-    def __init__(self, sx, sy, mag=1e-1):
-        super().__init__
-        self.W = mag*np.random.randn(sx, sy)
+class AffineParam(Param):
+    def __init__(self, W):
+        Param.__init__(self)
+        self.W = W
+
+    def __iter__(self):
+        yield self.W
+
+class Affine(Node, AffineParam):
+    def __init__(self, sx, sy, mag=1e-2):
+        Node.__init__(self)
+        AffineParam.__init__(self, mag*np.random.randn(sx, sy))
 
     def feed(self, x):
         return np.dot(x, self.W)
@@ -33,19 +44,27 @@ class Affine(Node):
         return self.feed(x), x
 
     def newgrad(self):
-        return np.zeros_like(self.W)
+        return AffineParam(np.zeros_like(self.W))
 
     def backprop(self, grad, m, dy):
-        grad += np.outer(m, dy)
+        grad.W += np.outer(m, dy)
         return np.dot(self.W, dy)
 
-    def _learn(self, grad):
-        self.W -= grad
+    def __iter__(self):
+        yield self.W
 
-class Bias(Node):
-    def __init__(self, s, mag=1e-1):
-        super().__init__()
-        self.b = mag*np.random.randn(s)
+class BiasParam(Param):
+    def __init__(self, b):
+        Param.__init__(self)
+        self.b = b
+
+    def __iter__(self):
+        yield self.b
+
+class Bias(Node, BiasParam):
+    def __init__(self, s, mag=1e-2):
+        Node.__init__(self)
+        BiasParam.__init__(self, mag*np.random.randn(s))
 
     def feed(self, x):
         return self.b + x
@@ -54,24 +73,27 @@ class Bias(Node):
         return self.feed(x), None
 
     def newgrad(self):
-        return np.zeros_like(self.b)
+        return BiasParam(np.zeros_like(self.b))
 
     def backprop(self, grad, m, dy):
-        grad += dy
+        grad.b += dy
         return dy
 
-    def _learn(self, grad):
-        self.b -= grad
-
-class _EmptyNode(Node):
+class _EmptyParam(Param):
     def __init__(self):
-        super().__init__()
+        Param.__init__(self)
+
+    def __iter__(self):
+        return
+        yield
+
+class _EmptyNode(Node, _EmptyParam):
+    def __init__(self):
+        Node.__init__(self)
+        _EmptyParam.__init__(self)
 
     def newgrad(self):
-        return None
-
-    def _learn(self, grad):
-        pass
+        return _EmptyParam()
 
 class Tanh(_EmptyNode):
     def __init__(self):
