@@ -33,7 +33,7 @@ class AffineParam(Param):
         yield self.W
 
 class Affine(Node, AffineParam):
-    def __init__(self, sx, sy, mag=1e-2):
+    def __init__(self, sx, sy, mag=1e-1):
         Node.__init__(self)
         AffineParam.__init__(self, mag*np.random.randn(sx, sy))
 
@@ -62,7 +62,7 @@ class BiasParam(Param):
         yield self.b
 
 class Bias(Node, BiasParam):
-    def __init__(self, s, mag=1e-2):
+    def __init__(self, s, mag=1e-1):
         Node.__init__(self)
         BiasParam.__init__(self, mag*np.random.randn(s))
 

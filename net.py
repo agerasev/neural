@@ -50,9 +50,9 @@ class Net(Node, Param):
             self.incnt[il[0]].append(il[1])
             self.oncnt[ol[0]].append(ol[1])
         for i in self.incnt:
-            self.incnt[i] = sorted(self.incnt[i])
+            self.incnt[i] = sorted(set(self.incnt[i]))
         for i in self.oncnt:
-            self.oncnt[i] = sorted(self.oncnt[i])
+            self.oncnt[i] = sorted(set(self.oncnt[i]))
 
     def __iter__(self):
         for node in self.nodes:
