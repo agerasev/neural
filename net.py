@@ -1,4 +1,4 @@
-from node import Node, Param
+from layer import Layer, Param
 
 import numpy as np
 
@@ -33,9 +33,9 @@ class NetGrad(Param):
             for p in param:
                 yield p
 
-class Net(Node, Param):
+class Net(Layer, Param):
     def __init__(self, nodes, links):
-        Node.__init__(self)
+        Layer.__init__(self)
         Param.__init__(self)
 
         self.nodes = nodes
@@ -54,18 +54,20 @@ class Net(Node, Param):
         for i in self.oncnt:
             self.oncnt[i] = sorted(set(self.oncnt[i]))
 
+        self.ios = (len(self.oncnt[-1]), len(self.incnt[-1]))
+
     def __iter__(self):
         for node in self.nodes:
             for p in node:
                 yield p
 
-    def _propagate(self, grad, im, v, mem=False, back=False):
+    def _propagate(self, grad, in_cache, v, back=False):
         v = _wrap_list(v)
 
-        if mem:
-            om = [None]*len(self.nodes)
+        if not back:
+            out_cache = [None]*len(self.nodes)
         else:
-            om = None
+            out_cache = None
 
         ivs = {k: None for k in set([link[1] for link in self.links])}
         ovs = {k: None for k in set([link[0] for link in self.links])}
@@ -74,11 +76,14 @@ class Net(Node, Param):
         if not back:
             ilmap, olmap = self.ilmap, self.olmap
             incnt, oncnt = self.incnt, self.oncnt
+            iio = 0
         else:
             ivs, ovs = ovs, ivs
             ilmap, olmap = self.olmap, self.ilmap
             incnt, oncnt = self.oncnt, self.incnt
-        
+            iio = 1
+
+        assert len(v) == self.ios[iio], "net ios count mismatch (%s != %s)" % (len(v), self.ios[iio])
         for oi in oncnt[-1]:
             ovs[(-1, oi)] = v[oi]
 
@@ -95,15 +100,13 @@ class Net(Node, Param):
                     continue
                 inv = [ivs[(i, ii)] for ii in incnt[i]]
                 if all([v is not None for v in inv]):
+                    assert len(inv) == node.ios[iio], "node(%s) ios count mismatch (%s != %s)" % (i, len(inv), node.ios[iio])
                     nx = _unwrap_list(inv)
                     if not back:
-                        if not mem:
-                            ny = node.feed(nx)
-                        else:
-                            ny, nm = node.feed_mem(nx)
-                            om[i] = nm
+                        ny, nm = node.forward(nx)
+                        out_cache[i] = nm
                     else:
-                        ny = node.backprop(grad.params[i], im[i], nx)
+                        ny = node.backward(grad.params[i], in_cache[i], nx)
                     onv = _wrap_list(ny)
                     used[i] = True
                     steps += 1
@@ -113,20 +116,16 @@ class Net(Node, Param):
             if steps == 0:
                 break
 
-        if not all(used):
-            raise Exception("no steps remaining while not all nodes are used, check network connectivity")
+        assert all(used), "no steps remaining while not all nodes are used, check network connectivity"
 
         y = _unwrap_list([ivs[(-1, ii)] for ii in incnt[-1]])
-        return y, om
+        return y, out_cache
 
-    def feed(self, x):
-        return self._propagate(None, None, x)[0]
+    def forward(self, x):
+        return self._propagate(None, None, x)
 
-    def feed_mem(self, x):
-        return self._propagate(None, None, x, mem=True)
+    def backward(self, grad, cache, dy):
+        return self._propagate(grad, cache, dy, back=True)[0]
 
     def newgrad(self):
         return NetGrad([node.newgrad() for node in self.nodes])
-
-    def backprop(self, grad, m, dy):
-        return self._propagate(grad, m, dy, back=True)[0]

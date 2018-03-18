@@ -7,6 +7,13 @@ def reg_loss(node, reg_rate=1e-3):
         loss += reg_rate*np.sum(W**2, axis=None)
     return loss
 
+def modgrad(grad, norm=1, clip=0):
+    for dW in grad:
+        if norm != 1 or norm != 0:
+            dW /= norm
+        if clip != 0:
+            np.clip(dW, -clip, clip, out=dW)
+
 class Optim:
     def __init__(self, **kwargs):
         self.opts = kwargs
@@ -18,16 +25,26 @@ class Optim:
                 dW += 2*reg_rate*W
 
     def modgrad(self, grad, **kwargs):
-        norm = kwargs.get("norm", 0)
+        norm = kwargs.get("norm", 1)
         clip = kwargs.get("clip", 0)
         for dW in grad:
-            if norm != 0:
+            if norm != 1 or norm != 0:
                 dW /= norm
             if clip != 0:
                 np.clip(dW, -clip, clip, out=dW)
 
     def learn(self, node, grad, **kwargs):
         raise NotImplementedError()
+
+class Reg(Optim):
+    def __init__(self, reg):
+        self.reg = reg
+
+    def learn(self, node, grad, **kwargs):
+        reg_rate = self.opts.get("reg_rate", 0)
+        if reg_rate != 0:
+            for W, dW in zip(node, grad):
+                dW += 2*reg_rate*W
 
 class SGD(Optim):
     def __init__(self, **kwargs):
