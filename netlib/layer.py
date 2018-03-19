@@ -1,5 +1,7 @@
 import numpy as np
-from util import *
+
+from .util import *
+
 
 class Param:
     def __init__(self):

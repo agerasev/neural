@@ -1,6 +1,6 @@
-from layer import Layer, Param
-
 import numpy as np
+
+from .layer import Layer, Param
 
 
 def _wrap_list(t):
@@ -34,7 +34,7 @@ class NetGrad(Param):
                 yield p
 
 class Net(Layer, Param):
-    def __init__(self, nodes, links):
+    def __init__(self, nodes, links, wmag=1):
         Layer.__init__(self)
         Param.__init__(self)
 
@@ -55,6 +55,10 @@ class Net(Layer, Param):
             self.oncnt[i] = sorted(set(self.oncnt[i]))
 
         self.ios = (len(self.oncnt[-1]), len(self.incnt[-1]))
+
+        if wmag != 1:
+            for W in self:
+                W *= wmag
 
     def __iter__(self):
         for node in self.nodes:
