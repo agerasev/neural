@@ -37,10 +37,14 @@ def extract(fpath, dstdir):
 	zip_.close()
 
 # all files to download
-targets = ["digits", "books"]
+targets = [
+	("digits", "digits.zip"),
+	("books", "books.zip"),
+	("charts_v01", "charts.zip")
+]
 
-for target in targets:
-	load(target, target + ".zip", "data")
+for release, filename in targets:
+	load(release, filename, "data")
 
-for target in targets:
-	extract("data/" + target + ".zip", "data")
+for release, filename in targets:
+	extract("data/" + filename, "data")
