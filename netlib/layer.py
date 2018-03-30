@@ -136,15 +136,3 @@ class Product(EmptyLayer):
 
     def backward(self, grad, cache, dy):
         return cache[1]*dy, cache[0]*dy
-
-class LossLayer(EmptyLayer):
-    def __init__(self):
-        super().__init__()
-
-class RMS(LossLayer):
-    def __init__(self):
-        super().__init__()
-
-class Softmax(LossLayer):
-    def __init__(self):
-        super().__init__()
