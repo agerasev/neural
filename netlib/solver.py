@@ -21,7 +21,7 @@ class RNNSolver(Solver):
     def __init__(self, net, optims, **params):
         super().__init__(net, optims, **params)
         
-    def learn(self, inseq, outseq):
+    def learn(self, inseq, outseq, gprel=1):
         if inseq.shape[0] != outseq.shape[0]:
             mlen = min((inseq.shape[0], outseq.shape[0]))
             inseq = inseq[0:mlen]
@@ -30,11 +30,17 @@ class RNNSolver(Solver):
         
         loss = 0.0
         cache = []
+
+        guided = int(gprel*seqlen)
         
         h = self.net.newstate(inseq.shape[1])
         if isinstance(h, np.ndarray):
             h = (h,)
-        for x, r in zip(inseq, outseq):
+        for i, (x, r) in enumerate(zip(inseq, outseq)):
+            if i <= guided:
+                x = np.stack((x[:,0], np.zeros(x.shape[0]))).transpose()
+            else:
+                x = np.stack((y[:,0], np.ones(y.shape[0]))).transpose()
             ovs, m = self.net.forward((x, *h))
             y, h = ovs[0], ovs[1:]
             cache.append((m, y, r))

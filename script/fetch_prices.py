@@ -40,27 +40,62 @@ def fetch_day(fc, tc, date=None):
 
 	return cast_chart(chart)
 
-total = []
-
-room = ("BTC", "USD")
+rooms = [
+	("BTC", "USD"),
+	("BTC", "EUR"),
+	("BTC", "GBP"),
+	("BTC", "RUB"),
+	("ETH", "USD"),
+	("ETH", "EUR"),
+	("ETH", "GBP"),
+	("ETH", "BTC"),
+	("BCH", "USD"),
+	("BCH", "EUR"),
+	("BCH", "GBP"),
+	("BCH", "BTC"),
+	("BTG", "USD"),
+	("BTG", "EUR"),
+	("BTG", "BTC"),
+	("DASH", "USD"),
+	("DASH", "EUR"),
+	("DASH", "GBP"),
+	("DASH", "BTC"),
+	("XRP", "USD"),
+	("XRP", "EUR"),
+	("XRP", "BTC"),
+	("XLM", "USD"),
+	("XLM", "EUR"),
+	("XLM", "BTC"),
+	("ZEC", "USD"),
+	("ZEC", "EUR"),
+	("ZEC", "GBP"),
+	("ZEC", "BTC"),
+	("GHS", "BTC"),
+]
 
 def fetch_all(fc, tc, start_date=None):
+	full_chart = []
 	try:
 		date = start_date
 		while True:
-			chart = fetch(fc, tc, date)
+			try:
+				chart = fetch_day(fc, tc, date)
+			except Exception as e:
+				print(e)
+				continue
 			if chart is None or len(chart) == 0:
 				print("[break] chart is empty")
 				break
-			total.extend(reversed(chart))
+			full_chart.extend(reversed(chart))
 
 			date = datetime.fromtimestamp(int(chart[0][0]))
 			date = date.astimezone(pytz.utc)
 			date -= timedelta(days=1)
+	except Exception as e:
+		print(e)
 	finally:
 		with open("%s-%s.json" % (fc, tc), "w") as f:
-			f.write(json.dumps(list(reversed(total))))
+			f.write(json.dumps(list(reversed(full_chart))))
 
-with open("BTC-USD.json", "r") as sf:
-	with open("BTC-USD_casted.json", "w") as df:
-		df.write(json.dumps(cast_chart(json.loads(sf.read()))))
+for fc, tc in rooms:
+	fetch_all(fc, tc, datetime(year=2018, month=3, day=30))
