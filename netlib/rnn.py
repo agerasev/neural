@@ -83,3 +83,13 @@ class LSTM(Net):
             np.zeros((count, self.sizes[1]), dtype=np.float64),
             np.zeros((count, self.sizes[1]), dtype=np.float64),
         )
+
+    def forward(self, xh):
+        x, h = xh
+        yh = super().forward([x] + list(h))
+        return (y[0], yh[1:])
+
+    def backward(self, grad, cache, dyh):
+        dy, dh = dyh
+        dxh = super().__init__(grad, cache, [dy] + list(dh))
+        return (dxh[0], dxh[1:])

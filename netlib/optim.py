@@ -1,20 +1,7 @@
 import numpy as np
 
 
-def reg_loss(node, reg_rate=1e-3):
-    loss = 0.0
-    for W in node:
-        loss += reg_rate*np.sum(W**2, axis=None)
-    return loss
-
-def modgrad(grad, norm=1, clip=0):
-    for dW in grad:
-        if norm != 1 or norm != 0:
-            dW /= norm
-        if clip != 0:
-            np.clip(dW, -clip, clip, out=dW)
-
-def init_accum(accum, node):
+def _init_accum_if_none(accum, node):
     if accum is None:
         return node.newgrad()
     return accum
@@ -26,6 +13,19 @@ class Optim:
     def learn(self, node, grad):
         raise NotImplementedError()
 
+class ModGrad(Optim):
+    def __init__(self, norm=1, clip=0):
+        super().__init__()
+        self.norm = norm
+        self.clip = clip
+
+    def learn(self, node, grad):
+        for dW in grad:
+            if self.norm != 1 or self.norm != 0:
+                dW /= self.norm
+            if self.clip != 0:
+                np.clip(dW, -self.clip, self.clip, out=dW)
+
 class Reg(Optim):
     def __init__(self, reg):
         super().__init__()
@@ -35,6 +35,15 @@ class Reg(Optim):
         if self.reg != 0:
             for W in node:
                 W -= 2*self.reg*W
+
+    def loss(self, node):
+        if self.reg != 0:
+            loss = 0.0
+            for W in node:
+                loss += self.reg*np.sum(W**2, axis=None)
+            return loss
+        else:
+            return 0.0
 
 class SGD(Optim):
     def __init__(self, learn_rate):
@@ -68,7 +77,7 @@ class Adagrad(Optim):
         self.eps = eps
 
     def learn(self, node, grad):
-        self.adagrad = init_accum(self.adagrad, node)
+        self.adagrad = _init_accum_if_none(self.adagrad, node)
         for W, dW, A in zip(node, grad, self.adagrad):
             if self.decay == 1:
                 A += dW**2
@@ -85,8 +94,8 @@ class Adadelta(Optim):
         self.eps = eps
 
     def learn(self, node, grad):
-        self.adagrad = init_accum(self.adagrad, node)
-        self.accum = init_accum(self.accum, node)
+        self.adagrad = _init_accum_if_none(self.adagrad, node)
+        self.accum = _init_accum_if_none(self.accum, node)
         g = self.gamma
         for W, dW, A, D in zip(node, grad, self.adagrad, self.accum):
             A = g*A + (1.0 - g)*dW**2
@@ -102,7 +111,7 @@ class RMSProp(Optim):
         self.gamma = gamma
 
     def learn(self, node, grad):
-        self.accum = init_accum(self.accum, node)
+        self.accum = _init_accum_if_none(self.accum, node)
         for W, dW, A in zip(node, grad, self.accum):
             A = self.gamma*A + (1.0 - self.gamma)*dW**2
             W -= self.rate*dW/np.sqrt(A + 1e-8)
@@ -118,8 +127,8 @@ class Adam(Optim):
         self.eps = eps
 
     def learn(self, node, grad):
-        self.M = init_accum(self.M, node)
-        self.V = init_accum(self.V, node)
+        self.M = _init_accum_if_none(self.M, node)
+        self.V = _init_accum_if_none(self.V, node)
         for W, dW, M, V in zip(node, grad, self.M, self.V):
             M = self.beta1*M + (1.0 - self.beta1)*dW
             V = self.beta2*V + (1.0 - self.beta2)*dW**2

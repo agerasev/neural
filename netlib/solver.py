@@ -1,98 +1,49 @@
 import numpy as np
 
 from .optim import *
-from .util import *
 
 
 class Solver:
-    def __init__(self, net, optims, **params):
+    def __init__(self, net, loss, optims, **params):
         self.params = params
-        self.name = params["name"]
+        self.name = params.get("name", "Unnamed")
+        
         self.net = net
+        self.loss_layer = loss
         
         if isinstance(optims, Optim):
             optims = [optims]
         self.optims = optims
 
-        self.loss_history = []
-
-
-class RNNSolver(Solver):
-    def __init__(self, net, optims, **params):
-        super().__init__(net, optims, **params)
+    def forward(self, x, r=None):
+        ny, nc = self.net.forward(x)
+        y, loss, lc = self.loss_layer.forward(ny, r)
         
-    def learn(self, inseq, outseq, gprel=1):
-        if inseq.shape[0] != outseq.shape[0]:
-            mlen = min((inseq.shape[0], outseq.shape[0]))
-            inseq = inseq[0:mlen]
-            outseq = outseq[0:mlen]
-        seqlen = inseq.shape[0]
+        if r is not None:
+            for optim in self.optims:
+                if hasattr(optim, "loss"):
+                    loss += optim.loss(self.net)
         
-        loss = 0.0
-        cache = []
-
-        guided = int(gprel*seqlen)
-        
-        h = self.net.newstate(inseq.shape[1])
-        if isinstance(h, np.ndarray):
-            h = (h,)
-        for i, (x, r) in enumerate(zip(inseq, outseq)):
-            if i <= guided:
-                x = np.stack((x[:,0], np.zeros(x.shape[0]))).transpose()
-            else:
-                x = np.stack((y[:,0], np.ones(y.shape[0]))).transpose()
-            ovs, m = self.net.forward((x, *h))
-            y, h = ovs[0], ovs[1:]
-            cache.append((m, y, r))
-            loss += rms_loss(y, r)
-        loss /= len(cache)
-
+        return y, loss, (nc, lc)
+    
+    def backward(self, cache):
+        nc, lc = cache
         grad = self.net.newgrad()
-        dh = self.net.newstate(inseq.shape[1])
-        if isinstance(dh, np.ndarray):
-            dh = (dh,)
-        for m, y, r in reversed(cache):
-            ovs = self.net.backward(grad, m, (rms_deriv(y, r), *dh))
-            dh = ovs[1:]
+        
+        dy = self.loss_layer.backward(lc)
+        dx = self.net.backward(grad, nc, dy)
+        
+        return dx, grad
+    
+    def learn(self, x, r):
+        y, loss, cache = self.forward(x, r)
+        dx, grad = self.backward(cache)
 
-        modgrad(grad, norm=1, clip=5)
         for optim in self.optims:
             optim.learn(self.net, grad)
 
-        self.loss_history.append(loss)
+        return y, loss, dx
             
-    def sample(self, seed, seqlen):
-        h = self.net.newstate(1)
-        if isinstance(h, np.ndarray):
-            h = (h,)
-        seq = []
-        x = seed
-        seq += seed
-        for i in range(seqlen):
-            ovs, _ = self.net.forward((x, *h))
-            y, h = ovs[0], ovs[1:]
-            seq.append(y)
-            x = y
-        return seq
+    def sample(self, x, r=None):
+        return self.forward(x, r)[0:2]
 
-
-def plot_solvers(plt, sols, red=10, win=100):
-    if isinstance(sols, Solver):
-        sols = [sols]
-        
-    plt.subplot(2, 1, 1)
-    for sol in sols:
-        lh = np.array(sol.loss_history)
-        lh.resize(lh.shape[0]//red, red)
-        plt.plot(np.mean(lh, axis=-1), label=sol.name)
-    plt.legend()
-
-    plt.subplot(2, 1, 2)
-    for sol in sols:
-        plt.plot(
-            sol.loss_history[-win:], 
-            label="%s loss: %.4f" % (sol.name, sol.loss_history[-1])
-        )
-    plt.legend()
-    
-    plt.show()
