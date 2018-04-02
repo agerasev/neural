@@ -1,5 +1,7 @@
 import numpy as np
 
+from .util import *
+
 
 class Loss:
     def __init__(self):
@@ -15,41 +17,50 @@ class RMS(Loss):
     def __init__(self):
         super().__init__()
 
-    def forward(self, x, r=None):
-        y = x
-        if r is not None:
-            loss = np.sum((y - r)**2, axis=None)/(2*r.shape[0])
-            cache = (y, r)
-        else:
-            loss = None
-            cache = None
-        return y, loss, cache
+    def forward(self, x, r):
+        loss = np.sum((x - r)**2, axis=None)/(2*r.shape[0])
+        cache = (x, r)
+
+        return x, loss, cache
 
     def backward(self, cache):
-        y, r = cache
-        dy = y - r
+        x, r = cache
+        dy = x - r
         return dy
 
 class Softmax(Loss):
     def __init__(self):
         super().__init__()
 
-    def forward(self, x, r=None):
-        t = x - np.max(x, axis=-1, keepdims=True)
-        et = np.exp(t)
-        y = et/np.sum(et, axis=-1, keepdims=True)
+    def forward(self, x, r):
+        y = softmax(x)
 
-        if r is not None:
-            mask = np.equal(r.reshape(-1, 1), np.arange(y.shape[-1]))
-            loss = np.sum(-np.log(y[mask]))/r.shape[0]
-            cache = (y, r, mask)
-        else:
-            loss = None
-            cache = None
+        mask = np.equal(r.reshape(-1, 1), np.arange(y.shape[-1]))
+        loss = np.sum(-np.log(y[mask]))/r.shape[0]
+        cache = (y, mask)
+
         return x, loss, cache
 
     def backward(self, cache):
-        y, r, mask = cache
+        y, mask = cache
         dy = np.copy(y)
+        dy[mask] -= 1.0
+        return dy
+
+class Binary(Loss):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x, r):
+        mask = np.equal(r, np.arange(x.shape[-1]))
+        y = sigmoid(-x)
+        y[mask] = 1.0 - y[mask]
+        loss = np.sum(-np.log(y), axis=None)/r.shape[0]
+        cache = (x, mask)
+        return x, loss, cache
+
+    def backward(self, cache):
+        x, mask = cache
+        dy = sigmoid(x)
         dy[mask] -= 1.0
         return dy

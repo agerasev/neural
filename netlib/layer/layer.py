@@ -1,6 +1,6 @@
 import numpy as np
 
-from .util import *
+from ..util import *
 
 
 class Param:
@@ -33,15 +33,17 @@ class AffineParam(Param):
         yield self.W
 
 class Affine(Layer, AffineParam):
-    def __init__(self, sx, sy, mag=1):
+    def __init__(self, sx, sy, mag=None):
         Layer.__init__(self)
-        AffineParam.__init__(self, (mag/(sx + sy))*np.random.randn(sx, sy))
+        if mag is None:
+            mag = 1.0/(sx + sy)
+        AffineParam.__init__(self, mag*np.random.randn(sx, sy))
 
     def forward(self, x):
         return np.tensordot(x, self.W, axes=(-1, 0)), x
 
     def backward(self, grad, cache, dy):
-        grad.W += np.tensordot(cache, dy, axes=(0, 0))/dy.shape[0]
+        grad.W += np.tensordot(cache, dy, axes=(0, 0))#/dy.shape[0]
         return np.tensordot(dy, self.W, axes=(-1, 1))
 
     def newgrad(self):
@@ -67,7 +69,7 @@ class Bias(Layer, BiasParam):
         return BiasParam(np.zeros_like(self.b))
 
     def backward(self, grad, cache, dy):
-        grad.b += np.sum(dy, axis=0)/dy.shape[0]
+        grad.b += np.sum(dy, axis=0)#/dy.shape[0]
         return dy
 
 class EmptyParam(Param):
@@ -111,7 +113,8 @@ class Sigmoid(EmptyLayer):
         super().__init__()
 
     def forward(self, x):
-        return sigmoid(x), x
+        sx = sigmoid(x)
+        return sx, sx
 
     def backward(self, grad, cache, dy):
         return dy*sigmoid_deriv(cache)

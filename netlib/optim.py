@@ -62,8 +62,7 @@ class Momentum(Optim):
         self.frict = frict
 
     def learn(self, node, grad):
-        if self.momentum is None:
-            self.momentum = node.newgrad()
+        self.momentum = _init_accum_if_none(self.momentum, node)
         for W, dW, M in zip(node, grad, self.momentum):
             M = self.frict*M + dW
             W -= self.rate*M

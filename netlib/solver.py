@@ -18,7 +18,7 @@ class Solver:
     def forward(self, x, r=None):
         ny, nc = self.net.forward(x)
         y, loss, lc = self.loss_layer.forward(ny, r)
-        
+
         if r is not None:
             for optim in self.optims:
                 if hasattr(optim, "loss"):
