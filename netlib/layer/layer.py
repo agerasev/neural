@@ -3,17 +3,19 @@ import numpy as np
 from ..util import *
 
 
-class Param:
+class _Param:
     def __init__(self):
         pass
 
     def __iter__(self):
         raise NotImplementedError()
 
-class Layer(Param):
+    def newgrad(self):
+        raise NotImplementedError()        
+
+class _Layer:
     def __init__(self):
-        Param.__init__(self)
-        self.ios = (1, 1)
+        pass
     
     def forward(self, x):
         raise NotImplementedError()
@@ -21,10 +23,12 @@ class Layer(Param):
     def backward(self, grad, cache, dy):
         raise NotImplementedError()
 
-    def newgrad(self):
-        raise NotImplementedError()
+class Layer():
+    def __init__(self, **kwargs):
+        self.ios = (1, 1)
+        self.dtype = kwargs.get("dtype", np.float64)
 
-class AffineParam(Param):
+class _AffineParam(_Param):
     def __init__(self, W):
         super().__init__()
         self.W = W
@@ -32,12 +36,18 @@ class AffineParam(Param):
     def __iter__(self):
         yield self.W
 
-class Affine(Layer, AffineParam):
-    def __init__(self, sx, sy, mag=None):
-        Layer.__init__(self)
+    def newgrad(self):
+        _AffineParam(np.zeros_like(self.W))
+
+class _Affine(_Layer):
+    def __init__(self):
+        super().__init__()
+
+    def _initparam(sx, sy, mag, dtype):
         if mag is None:
             mag = 1.0/(sx + sy)
-        AffineParam.__init__(self, mag*np.random.randn(sx, sy))
+        randn = np.random.randn(sx, sy, dtype=dtype)
+        return mag*randn
 
     def forward(self, x):
         return np.tensordot(x, self.W, axes=(-1, 0)), x
@@ -46,35 +56,90 @@ class Affine(Layer, AffineParam):
         grad.W += np.tensordot(cache, dy, axes=(0, 0))#/dy.shape[0]
         return np.tensordot(dy, self.W, axes=(-1, 1))
 
-    def newgrad(self):
-        return AffineParam(np.zeros_like(self.W))
+class Affine(Layer, _Affine, _AffineParam):
+    def __init__(self, sx, sy, **kwargs):
+        Layer.__init__(self, **kwargs)
+        _Affine.__init__(self)
+        _AffineParam.__init__(
+            self,
+            _Affine._ip(
+                sx, sy, 
+                kwargs.get("mag", None), 
+                dtype=self.dtype
+            )
+        )
 
-class BiasParam(Param):
+class _BiasParam(_Param):
     def __init__(self, b):
-        Param.__init__(self)
+        _Param.__init__(self)
         self.b = b
 
     def __iter__(self):
         yield self.b
 
-class Bias(Layer, BiasParam):
-    def __init__(self, s):
-        Layer.__init__(self)
-        BiasParam.__init__(self, np.zeros(s, dtype=np.float64))
+    def newgrad(self):
+        return _BiasParam(np.zeros_like(self.b))
+
+class _Bias(_Layer):
+    def __init__(self):
+        super().__init__()
+
+    def _ip(self, s, dtype):
+        return np.zeros(s, dtype=dtype)
 
     def forward(self, x):
         return self.b + x, None
-
-    def newgrad(self):
-        return BiasParam(np.zeros_like(self.b))
 
     def backward(self, grad, cache, dy):
         grad.b += np.sum(dy, axis=0)#/dy.shape[0]
         return dy
 
-class EmptyParam(Param):
+class Bias(Layer, _Bias, _BiasParam):
+    def __init__(self, s, **kwargs):
+        Layer.__init__(self, **kwargs)
+        _Bias.__init__(self)
+        BiasParam.__init__(self, _Bias._ip(s, self.dtype))
+
+class _AffineBiasParam(_AffineParam, _BiasParam):
+    def __init__(self, W, b):
+        _AffineParam.__init__(self, W)
+        _BiasParam.__init__(self, b)
+
+    def __iter__(self):
+        yield self.W
+        yield self.b
+
+    def newgrad(self):
+        return _AffineBiasParam(
+            *[np.zeros_like(w) for w in [self.W, self.b]]
+        )
+
+class _AffineBias(_Affine, _Bias):
     def __init__(self):
-        Param.__init__(self)
+        super().__init__()
+
+    def forward(self, x):
+        t, m0 = _Affine.forward(self, x)
+        y, m1 = _Bias.forward(self, t)
+        return y, (m0, m1)
+
+    def backward(self, grad, cache, dy):
+        m0, m1 = cache
+        dt = _Bias.backward(self, grad, m1, dy)
+        dx = _Affine.backward(self, grad, m0, dt)
+        return dx
+
+class _AffineBias(_Layer, AffineBiasParam):
+    def __init__(self, sx, sy, mag=None):
+        Affine.__init__(self, sx, sy, mag=None)
+        Bias.__init__(self, sy)
+        _Param.__init__(self)
+
+    
+
+class EmptyParam(_Param):
+    def __init__(self):
+        _Param.__init__(self)
 
     def __iter__(self):
         return

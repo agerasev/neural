@@ -9,9 +9,9 @@ class RNN(Net):
         self.sizes = sizes
         sx, sh, sy = sizes
         layers = [
-            Affine(sx, sh), # W_xh
-            Affine(sh, sh), # W_hh
-            Affine(sh, sy), # W_hy
+            AffineBias(sx, sh), # W_xh
+            AffineBias(sh, sh), # W_hh
+            AffineBias(sh, sy), # W_hy
             Tanh()
         ]
         links = [
@@ -33,16 +33,16 @@ class LSTM(Net):
         self.sizes = sizes
         sx, sh, sy = sizes
         layers = [
-            Affine(sx, sh), #  0, W_xh
-            Affine(sh, sy), #  1, W_hy
-            Affine(sh, sh), #  2, W_hc
+            AffineBias(sx, sh), #  0, W_xh
+            AffineBias(sh, sy), #  1, W_hy
+            AffineBias(sh, sh), #  2, W_hc
             Tanh(),         #  3, a_hc
-            Affine(sh, sh), #  4, W_f
+            AffineBias(sh, sh), #  4, W_f
             Sigmoid(),      #  5, a_f
-            Affine(sh, sh), #  6, W_i
+            AffineBias(sh, sh), #  6, W_i
             Sigmoid(),      #  7, a_i
             Product(),      #  8, p_ih
-            Affine(sh, sh), #  9, W_o
+            AffineBias(sh, sh), #  9, W_o
             Sigmoid(),      # 10, a_o
             Product(),      # 11, p_cf
             Tanh(),         # 12, a_ch
